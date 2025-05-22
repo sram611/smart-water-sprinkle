@@ -29,7 +29,7 @@ def get_lat_lon(zip, api_key):
     if data:
         return data["lat"], data["lon"]
     else:
-        raise ValueError(f"Could not find coordinates for city: {city}")
+        raise ValueError(f"Could not find coordinates for zip: {zip}")
     
 def get_hourly_forecast(lat, lon, api_key):
     url = "https://api.openweathermap.org/data/3.0/onecall"
