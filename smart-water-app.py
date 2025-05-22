@@ -163,6 +163,9 @@ def check_and_schedule():
     except Exception as e:
         print(f"Weather fetch failed: {e}")
         return
+    
+    # 💾 Log today for future decisions
+    log_today_conditions(hourly)
 
     # 🌧️ Check past rain
     hist_rain, hist_max_temp = get_recent_cached_rain(days=2)
@@ -171,9 +174,6 @@ def check_and_schedule():
     if hist_rain > 0.3 and hist_max_temp < 80:
         send_push_notification("🌧️ Recent rain and cool temps. No need to water today.")
         return
-
-    # 💾 Log today for future decisions
-    log_today_conditions(hourly)
 
     grouped_ranges = group_by_day_and_range(hourly)
     if not grouped_ranges:
