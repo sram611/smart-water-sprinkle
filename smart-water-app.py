@@ -1,6 +1,4 @@
 import requests
-import schedule
-import time
 from datetime import datetime, timedelta
 
 # --- Configuration ---
@@ -46,23 +44,48 @@ def get_hourly_forecast(lat, lon, api_key):
     response.raise_for_status()
     return response.json()["hourly"]
 
-def choose_ideal_times(hourly_forecasts):
-    """Return all evening slots with ideal temp and no rain within next 48 hours."""
+def group_by_day_and_range(hourly_forecasts):
+    """Group ideal hourly times into daily time ranges."""
     ideal_times = []
 
-    for forecast in hourly_forecasts[:48]:  # next 48 hours
+    for forecast in hourly_forecasts[:48]:  # Next 48 hours
         dt = datetime.fromtimestamp(forecast["dt"])
         hour = dt.hour
 
         if hour in EVENING_HOURS:
             temp = forecast["temp"]
             rain = forecast.get("rain", {}).get("1h", 0.0) or 0.0
-            print(f"Checking forecast for {dt}: Temp: {temp}°F, Rain: {rain} in")
 
             if TEMP_MIN_F <= temp <= TEMP_MAX_F and rain < RAIN_THRESHOLD_IN:
                 ideal_times.append(dt)
 
-    return ideal_times
+    if not ideal_times:
+        return {}
+
+    # Group into day -> list of time ranges
+    grouped = {}
+    start = end = ideal_times[0]
+
+    for current in ideal_times[1:]:
+        if (current - end) == timedelta(hours=1):
+            end = current
+        else:
+            day_key = start.date()
+            grouped.setdefault(day_key, []).append((start, end))
+            start = end = current
+    # Add final range
+    grouped.setdefault(start.date(), []).append((start, end))
+
+    return grouped
+
+def format_day_label(day):
+    today = datetime.now().date()
+    if day == today:
+        return "Today"
+    elif day == today + timedelta(days=1):
+        return "Tomorrow"
+    else:
+        return day.strftime("%A")
 
 def check_and_schedule():
     print(f"[{datetime.now()}] Checking forecast for watering...")
@@ -74,18 +97,24 @@ def check_and_schedule():
         print(f"Weather fetch failed: {e}")
         return
 
-    ideal_times = choose_ideal_times(hourly)
-    if not ideal_times:
-        send_push_notification("⚠️ No good watering time found for today.")
+    grouped_ranges = group_by_day_and_range(hourly)
+
+    if not grouped_ranges:
+        send_push_notification("⚠️ No good watering time found for today or tomorrow.")
         return
 
-    # Format time range nicely (e.g. 5:00 PM, 6:00 PM, etc.)
-    formatted_times = [dt.strftime("%-I:%M %p") for dt in ideal_times]
-    time_range_msg = ", ".join(formatted_times)
+    lines = ["💧 Ideal watering times:"]
+    for day, ranges in sorted(grouped_ranges.items()):
+        day_label = format_day_label(day)
+        range_strs = []
+        for start, end in ranges:
+            if start == end:
+                range_strs.append(start.strftime("%-I %p"))
+            else:
+                range_strs.append(f"{start.strftime('%-I %p')} to {end.strftime('%-I %p')}")
+        lines.append(f"• {day_label}: {', '.join(range_strs)}")
 
-    send_push_notification(
-        f"💧 Ideal lawn watering times: {time_range_msg}. Conditions look great!"
-    )
+    send_push_notification("\n".join(lines))
 
 print("🧠 Smart Lawn Watering Assistant running...")
 check_and_schedule()
