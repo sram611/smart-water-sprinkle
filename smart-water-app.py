@@ -33,10 +33,10 @@ def clean_old_cache(cache, days_to_keep=7):
 
 
 # --- Configuration ---
-ZIP = 60560
-WEATHER_API_KEY = ""
 
-NTFY_URL = "https://ntfy.sh/sram611_time_to_sprinkle"
+ZIP = os.getenv("ZIP_CODE", "60560")
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+NTFY_URL = os.getenv("NTFY_URL", "https://ntfy.sh/sram611_time_to_sprinkle")
 
 # Temperature thresholds in Fahrenheit (59°F to 86°F)
 TEMP_MIN_F = 59
