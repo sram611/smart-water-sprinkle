@@ -1,5 +1,36 @@
 import requests
 from datetime import datetime, timedelta
+import os, json
+
+CACHE_FILE = "weather_cache.json"
+
+def load_cache():
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "r") as f:
+            cache = json.load(f)
+        cache = clean_old_cache(cache)
+        return cache
+    else:
+        # Create an empty cache if the file doesn't exist
+        with open(CACHE_FILE, "w") as f:
+            json.dump({}, f)
+        print("Cache file created.")
+        return {}
+
+def save_cache(cache):
+    cache = clean_old_cache(cache)
+    with open(CACHE_FILE, "w") as f:
+        json.dump(cache, f)
+
+def clean_old_cache(cache, days_to_keep=7):
+    today = datetime.now().date()
+    cutoff_date = today - timedelta(days=days_to_keep)
+    keys_to_remove = [key for key in cache if datetime.strptime(key, "%Y-%m-%d").date() < cutoff_date]
+
+    for key in keys_to_remove:
+        del cache[key]
+    return cache
+
 
 # --- Configuration ---
 ZIP = 60560
@@ -14,6 +45,42 @@ RAIN_THRESHOLD_IN = 0.02  # roughly 0.5mm
 
 # Evening hours (5 PM to 8 PM)
 EVENING_HOURS = [17, 18, 19, 20]
+
+def log_today_conditions(hourly_forecasts):
+    today = datetime.now().date()
+    rain_total = 0.0
+    max_temp = float("-inf")
+
+    for forecast in hourly_forecasts:
+        dt = datetime.fromtimestamp(forecast["dt"])
+        if dt.date() == today:
+            rain = forecast.get("rain", {}).get("1h", 0.0) or 0.0
+            temp = forecast.get("temp", 0.0)
+            rain_total += rain
+            max_temp = max(max_temp, temp)
+
+    cache = load_cache()
+    cache[str(today)] = {
+        "rain": round(rain_total, 3),
+        "max_temp": round(max_temp, 1)
+    }
+    save_cache(cache)
+
+def get_recent_cached_rain(days=2):
+    cache = load_cache()
+    total_rain = 0.0
+    max_temp = 0.0
+    today = datetime.now().date()
+
+    for i in range(1, days + 1):
+        day = today - timedelta(days=i)
+        date_str = day.strftime("%Y-%m-%d")
+        data = cache.get(date_str)
+        if data:
+            total_rain += data.get("rain", 0.0)
+            max_temp = max(max_temp, data.get("max_temp", 0.0))
+    
+    return total_rain, max_temp
 
 def send_push_notification(message):
     try:
@@ -97,8 +164,18 @@ def check_and_schedule():
         print(f"Weather fetch failed: {e}")
         return
 
-    grouped_ranges = group_by_day_and_range(hourly)
+    # 🌧️ Check past rain
+    hist_rain, hist_max_temp = get_recent_cached_rain(days=2)
+    print(f"📊 Past 2 days: {hist_rain:.2f}\" rain, max temp {hist_max_temp:.1f}°F")
 
+    if hist_rain > 0.3 and hist_max_temp < 80:
+        send_push_notification("🌧️ Recent rain and cool temps. No need to water today.")
+        return
+
+    # 💾 Log today for future decisions
+    log_today_conditions(hourly)
+
+    grouped_ranges = group_by_day_and_range(hourly)
     if not grouped_ranges:
         send_push_notification("⚠️ No good watering time found for today or tomorrow.")
         return
