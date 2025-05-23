@@ -6,7 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
 
-CACHE_FILE = "weather_cache.json"
+CACHE_FILE = os.getenv("CACHE_FILE")
 
 app = Flask(__name__)
 

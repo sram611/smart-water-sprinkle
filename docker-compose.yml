@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  smart-water-app:
+    image: sram611/smart-water-app:latest  # Replace with your pushed image name
+    container_name: smart-water-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Expose Flask app      
+    env_file:
+      - .env
+    volumes:
+      - /Users/sriramannamalai/Documents/Development-Tools/Personal/smart-water-sprinkle:/data
