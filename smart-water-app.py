@@ -1,8 +1,14 @@
 import requests
 from datetime import datetime, timedelta
 import os, json
+from flask import Flask, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from zoneinfo import ZoneInfo
 
 CACHE_FILE = "weather_cache.json"
+
+app = Flask(__name__)
 
 def load_cache():
     if os.path.exists(CACHE_FILE):
@@ -193,5 +199,29 @@ def check_and_schedule():
 
     send_push_notification("\n".join(lines))
 
-print("🧠 Smart Lawn Watering Assistant running...")
-check_and_schedule()
+def start_scheduler():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        check_and_schedule,
+        trigger=CronTrigger(hour=7, minute=0, timezone=ZoneInfo("America/Chicago")),
+        id="daily_watering_check",
+        replace_existing=True
+    )
+    scheduler.start()
+
+@app.route("/check", methods=["GET"])
+def trigger_check():
+    try:
+        check_and_schedule()
+        return jsonify({"status": "success", "message": "Check completed"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/health", methods=["GET"])
+def health():
+    return "OK", 200
+
+if __name__ == "__main__":
+    print("🧠 Smart Lawn Watering Assistant running...")
+    start_scheduler()
+    app.run(host="0.0.0.0", port=8000)
